@@ -66,11 +66,11 @@ func (s *Store) PutBinary(program, version, osName, arch string, r io.Reader, ma
 		return err
 	}
 
-	tmpPath := finalPath + ".tmp"
-	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	f, err := os.CreateTemp(dir, ".upload-*")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
+	tmpPath := f.Name()
 
 	limited := io.LimitReader(r, maxSize+1)
 	n, err := io.Copy(f, limited)
@@ -84,6 +84,10 @@ func (s *Store) PutBinary(program, version, osName, arch string, r io.Reader, ma
 		return fmt.Errorf("file exceeds maximum size of %d bytes", maxSize)
 	}
 
+	if err := os.Chmod(tmpPath, 0644); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("setting file permissions: %w", err)
+	}
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("finalizing file: %w", err)

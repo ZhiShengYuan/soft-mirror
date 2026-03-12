@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -128,6 +127,6 @@ func DirectDownload(store *storage.Store) gin.HandlerFunc {
 		}
 		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, dlFilename))
 
-		http.ServeContent(c.Writer, c.Request, dlFilename, time.Time{}, f)
+		http.ServeContent(c.Writer, c.Request, dlFilename, info.ModTime, f)
 	}
 }

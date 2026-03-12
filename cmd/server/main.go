@@ -74,10 +74,14 @@ func main() {
 	// Create HMAC middleware
 	hmacMiddleware := middleware.NewHMACMiddleware(cfg.HMACSecret, cfg.HMACMaxDrift)
 
-	// Start nonce cleanup
+	// Shutdown context — controls cleanup goroutines
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	hmacMiddleware.StartCleanup(ctx)
+
+	// Rate limiter for authenticated endpoints: 60 requests per minute per IP.
+	// Goroutine lifetime is tied to ctx so it stops on server shutdown.
+	authRateLimit := middleware.NewRateLimiter(ctx, 60, time.Minute)
 
 	// Routes
 	router.GET("/healthz", handler.Health)
@@ -90,18 +94,22 @@ func main() {
 		api.GET("/programs/:name/download", handler.AutoDownload(store))
 		api.GET("/programs/:name/:version/:os/:arch", handler.DirectDownload(store))
 
-		// Authenticated routes
+		// Authenticated routes: HMAC runs first so unsigned requests never
+		// consume the rate-limit budget (preventing DoS via quota exhaustion).
 		api.PUT("/programs/:name/:version/:os/:arch",
 			hmacMiddleware.Middleware(),
+			authRateLimit.Middleware(),
 			middleware.MaxBodySize(cfg.MaxUploadSize),
 			handler.Upload(store, cfg.MaxUploadSize),
 		)
 		api.DELETE("/programs/:name/:version/:os/:arch",
 			hmacMiddleware.Middleware(),
+			authRateLimit.Middleware(),
 			handler.DeleteBinary(store),
 		)
 		api.DELETE("/programs/:name/:version",
 			hmacMiddleware.Middleware(),
+			authRateLimit.Middleware(),
 			handler.DeleteVersion(store),
 		)
 	}
