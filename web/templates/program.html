@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Program}} &mdash; File Host</title>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --surface: #ffffff;
+    --border: #e1e4e8;
+    --text: #24292e;
+    --text-muted: #6a737d;
+    --accent: #0366d6;
+    --accent-hover: #0256b0;
+    --btn-bg: #0366d6;
+    --btn-text: #ffffff;
+    --code-bg: #f3f4f5;
+    --table-head: #f3f4f5;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79bbff;
+      --btn-bg: #1f6feb;
+      --btn-text: #ffffff;
+      --code-bg: #161b22;
+      --table-head: #21262d;
+      --shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: ui-monospace, 'SFMono-Regular', 'Cascadia Code', 'Fira Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  .breadcrumb { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem; }
+  .breadcrumb a { color: var(--accent); text-decoration: none; }
+  .breadcrumb a:hover { text-decoration: underline; }
+  h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  .recommend-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+  }
+  .recommend-box h2 { font-size: 1rem; margin-bottom: 1rem; }
+  .btn {
+    display: inline-block;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .install-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+  }
+  .install-box h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    font-size: 0.82rem;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .versions-section h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+  .version-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .version-header {
+    background: var(--table-head);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .version-tag {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 0.75rem;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td {
+    padding: 0.6rem 1rem;
+    text-align: left;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  th { color: var(--text-muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  td a { color: var(--accent); text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+  .size-text { color: var(--text-muted); font-size: 0.8rem; }
+  .os-badge {
+    display: inline-block;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-right: 2px;
+  }
+  .os-linux { background: #ffd700; color: #333; }
+  .os-darwin { background: #555; color: #fff; }
+  .os-windows { background: #0078d4; color: #fff; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="breadcrumb">
+    <a href="/">&#x2190; All programs</a> / {{.Program}}
+  </div>
+  <h1>{{.Program}}</h1>
+  <p class="subtitle">{{len .Versions}} version{{if ne (len .Versions) 1}}s{{end}} available</p>
+
+  <div class="recommend-box">
+    <h2>&#x2B07; Recommended Download</h2>
+    <p id="rec-text" style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">Detecting your platform...</p>
+    <a id="rec-link" class="btn" href="/api/v1/programs/{{.Program}}/download">Download for your platform</a>
+  </div>
+
+  <div class="install-box">
+    <h2>&#x1F4CB; Quick Install</h2>
+    <div class="code-block">curl -fsSL "https://your-host/api/v1/programs/{{.Program}}/download" -o {{.Program}} &amp;&amp; chmod +x {{.Program}}</div>
+    <p style="font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem;">
+      Add <code>?os=linux&amp;arch=amd64</code> to specify platform explicitly.
+    </p>
+  </div>
+
+  {{if .Versions}}
+  <div class="versions-section">
+    <h2>All Versions</h2>
+    {{range .Versions}}
+    <div class="version-block">
+      <div class="version-header">
+        <span class="version-tag">{{.Version}}</span>
+        <span style="color:var(--text-muted);font-weight:400;font-size:0.82rem;">{{len .Platforms}} platform{{if ne (len .Platforms) 1}}s{{end}}</span>
+      </div>
+      {{if .Platforms}}
+      <table>
+        <thead>
+          <tr><th>OS</th><th>Arch</th><th>Size</th><th>Download</th></tr>
+        </thead>
+        <tbody>
+          {{range .Platforms}}
+          <tr>
+            <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
+            <td>{{.Arch}}</td>
+            <td class="size-text">{{.SizeFormatted}}</td>
+            <td><a href="{{.DownloadURL}}">&#x1F4E5; Download</a></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p style="padding:0.75rem 1rem;color:var(--text-muted);font-size:0.85rem;">No binaries available for this version.</p>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  {{else}}
+  <p style="color:var(--text-muted);">No versions available yet.</p>
+  {{end}}
+</div>
+<script>
+(function() {
+  var ua = navigator.userAgent || '';
+  var os = 'linux', arch = 'amd64';
+  var ual = ua.toLowerCase();
+  if (ual.indexOf('windows') !== -1) os = 'windows';
+  else if (ual.indexOf('mac') !== -1 || ual.indexOf('darwin') !== -1) os = 'darwin';
+  if (ual.indexOf('arm64') !== -1 || ual.indexOf('aarch64') !== -1) arch = 'arm64';
+  var rec = document.getElementById('rec-text');
+  var link = document.getElementById('rec-link');
+  if (rec) rec.textContent = 'Detected: ' + os + '/' + arch;
+  if (link) link.href = '/api/v1/programs/{{.Program}}/download?os=' + os + '&arch=' + arch;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+listen_addr: ":8080"
+data_dir: "./data"
+hmac_secret: "change-me-to-a-strong-secret"
+hmac_max_drift: "5m"
+max_upload_size: 536870912  # 512 MiB
+log_level: "info"           # debug, info, warn, error
+log_format: "json"          # json or text
+log_file: ""                # empty = stdout only
+trusted_proxies: []         # e.g. ["10.0.0.0/8", "172.16.0.0/12"]
