@@ -5,16 +5,16 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=%h/.local/bin/file-host
+ExecStart=/usr/local/bin/file-host
 Restart=on-failure
 RestartSec=5s
 
-# Runtime data directory (created automatically by systemd)
+# systemd creates /var/lib/file-host and /var/cache/file-host automatically
 StateDirectory=file-host
-Environment=DATA_DIR=%S/file-host
+Environment=DATA_DIR=/var/lib/file-host
 
-# Required — set your secret here or override via a drop-in:
-#   systemctl --user edit file-host
+# Required — set your secret via a drop-in to keep it out of this file:
+#   systemctl edit file-host
 # and add:
 #   [Service]
 #   Environment=HMAC_SECRET=your-secret-here
@@ -24,12 +24,21 @@ Environment=LISTEN_ADDR=:8080
 Environment=LOG_FORMAT=json
 Environment=LOG_LEVEL=info
 
+# Run as a dedicated unprivileged user (created automatically by systemd)
+DynamicUser=yes
+
 # Hardening
 PrivateTmp=true
 NoNewPrivileges=true
-ProtectHome=read-only
+ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=%S/file-host
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
