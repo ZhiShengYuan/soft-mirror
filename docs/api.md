@@ -357,6 +357,7 @@ All errors return a JSON object with a single `error` field:
 | `400 Bad Request` | Invalid program name, version, OS, arch, or body exceeds size limit |
 | `401 Unauthorized` | HMAC authentication failed (missing headers, invalid signature, expired timestamp, replayed nonce) |
 | `404 Not Found` | Program, version, or binary does not exist |
+| `429 Too Many Requests` | Rate limit exceeded on authenticated endpoints (60 req/min per IP) |
 | `500 Internal Server Error` | Unexpected server-side failure |
 
 ### Validation constraints
@@ -367,3 +368,62 @@ All errors return a JSON object with a single `error` field:
 | Version | Valid semver, with or without `v` prefix |
 | OS | `linux`, `darwin`, or `windows` |
 | Architecture | `amd64` or `arm64` |
+
+---
+
+## Configuration
+
+Configuration is read from a YAML file (path set via `CONFIG_FILE` env var), then overridden by environment variables.
+
+| Env var | YAML key | Default | Description |
+|---|---|---|---|
+| `HMAC_SECRET` | `hmac_secret` | *(required)* | Shared secret for HMAC authentication |
+| `LISTEN_ADDR` | `listen_addr` | `:8080` | TCP address to listen on |
+| `DATA_DIR` | `data_dir` | `./data` | Root directory for stored binaries |
+| `HMAC_MAX_DRIFT` | `hmac_max_drift` | `5m` | Max allowed clock skew (max `15m`) |
+| `MAX_UPLOAD_SIZE` | `max_upload_size` | `536870912` | Max upload size in bytes (default 512 MiB) |
+| `LOG_LEVEL` | `log_level` | `info` | `debug` \| `info` \| `warn` \| `error` |
+| `LOG_FORMAT` | `log_format` | `json` | `json` \| `text` |
+| `LOG_FILE` | `log_file` | *(stdout only)* | Optional file path to append logs to |
+| `TRUSTED_PROXIES` | `trusted_proxies` | *(none)* | Comma-separated trusted proxy CIDRs/IPs |
+
+### Example YAML config
+
+```yaml
+listen_addr: ":8080"
+data_dir: /var/lib/file-host
+hmac_secret: "change-me"
+hmac_max_drift: 5m
+max_upload_size: 536870912
+log_level: info
+log_format: json
+trusted_proxies:
+  - 10.0.0.0/8
+```
+
+---
+
+## Storage layout
+
+```
+{data_dir}/
+└── {program}/
+    └── {version}/
+        └── {os}/
+            └── {arch}/
+                └── {program}        (linux / darwin)
+                └── {program}.exe    (windows)
+```
+
+---
+
+## Security headers
+
+All responses include the following headers:
+
+| Header | Value |
+|---|---|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Content-Security-Policy` | `default-src 'self'; style-src 'self' 'unsafe-inline'` |
+| `X-XSS-Protection` | `1; mode=block` |
