@@ -1,0 +1,35 @@
+[Unit]
+Description=file-host binary server
+Documentation=https://github.com/ZhiShengYuan/soft-mirror
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/file-host
+Restart=on-failure
+RestartSec=5s
+
+# Runtime data directory (created automatically by systemd)
+StateDirectory=file-host
+Environment=DATA_DIR=%S/file-host
+
+# Required — set your secret here or override via a drop-in:
+#   systemctl --user edit file-host
+# and add:
+#   [Service]
+#   Environment=HMAC_SECRET=your-secret-here
+Environment=HMAC_SECRET=
+
+Environment=LISTEN_ADDR=:8080
+Environment=LOG_FORMAT=json
+Environment=LOG_LEVEL=info
+
+# Hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=%S/file-host
+
+[Install]
+WantedBy=default.target
