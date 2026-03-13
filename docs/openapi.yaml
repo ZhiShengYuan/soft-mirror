@@ -1,0 +1,504 @@
+openapi: "3.1.0"
+
+info:
+  title: file-host
+  version: "0.1.0"
+  description: |
+    HTTP server for distributing executable binaries by program name,
+    semantic version, OS, and architecture.
+
+    Write operations (upload, delete) require HMAC-SHA256 authentication.
+    See the `HMACAuth` security scheme for the signing procedure.
+
+servers:
+  - url: http://localhost:8080
+    description: Local instance
+
+tags:
+  - name: public
+    description: No authentication required
+  - name: write
+    description: Requires HMAC-SHA256 authentication
+
+# ─── Reusable components ──────────────────────────────────────────────────────
+components:
+  parameters:
+    programName:
+      name: name
+      in: path
+      required: true
+      description: Program name. Pattern `^[a-zA-Z0-9_-]+$`, max 128 chars.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]+$"
+        maxLength: 128
+        example: myapp
+
+    version:
+      name: version
+      in: path
+      required: true
+      description: Semantic version string. `v` prefix is optional.
+      schema:
+        type: string
+        example: v1.2.0
+
+    os:
+      name: os
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [linux, darwin, windows]
+
+    arch:
+      name: arch
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [amd64, arm64]
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "binary not found"
+
+    Platform:
+      type: object
+      required: [os, arch]
+      properties:
+        os:
+          type: string
+          enum: [linux, darwin, windows]
+        arch:
+          type: string
+          enum: [amd64, arm64]
+
+    VersionInfo:
+      type: object
+      required: [version, platforms]
+      properties:
+        version:
+          type: string
+          example: v1.2.0
+        platforms:
+          type: array
+          items:
+            $ref: "#/components/schemas/Platform"
+
+    VersionsResponse:
+      type: object
+      required: [program, versions]
+      properties:
+        program:
+          type: string
+          example: myapp
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/VersionInfo"
+
+    UploadResponse:
+      type: object
+      required: [message, program, version, os, arch]
+      properties:
+        message:
+          type: string
+          example: uploaded successfully
+        program:
+          type: string
+          example: myapp
+        version:
+          type: string
+          example: v1.2.0
+        os:
+          type: string
+          enum: [linux, darwin, windows]
+        arch:
+          type: string
+          enum: [amd64, arm64]
+
+    DeleteResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: deleted
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+
+  securitySchemes:
+    HMACAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        HMAC-SHA256 request authentication.
+
+        **Required headers:**
+        - `Authorization: HMAC <hex_signature>`
+        - `X-Timestamp: <unix_epoch_seconds>`
+        - `X-Nonce: <unique_string>`
+
+        **Signing procedure:**
+        ```
+        string_to_sign = METHOD + "\n"
+                       + PATH   + "\n"
+                       + TIMESTAMP + "\n"
+                       + NONCE  + "\n"
+                       + hex(sha256(body))
+
+        signature = hex(hmac-sha256(secret, string_to_sign))
+        ```
+
+        - `METHOD`: uppercase HTTP verb, e.g. `PUT`
+        - `PATH`: URL path only, no query string
+        - `TIMESTAMP`: Unix epoch seconds as a decimal string
+        - `NONCE`: unique per-request string; replayed nonces are rejected
+        - `body`: raw request body bytes; empty body uses `sha256("")`
+
+        Requests are rejected if `|now − timestamp| > hmac_max_drift` (default 5m, max 15m).
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+paths:
+
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Health check
+      tags: [public]
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/programs/{name}/versions:
+    get:
+      operationId: listVersions
+      summary: List versions for a program
+      tags: [public]
+      parameters:
+        - $ref: "#/components/parameters/programName"
+      responses:
+        "200":
+          description: Version list (empty array if program has no binaries)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionsResponse"
+              example:
+                program: myapp
+                versions:
+                  - version: v1.2.0
+                    platforms:
+                      - {os: linux, arch: amd64}
+                      - {os: darwin, arch: arm64}
+                  - version: v1.0.0
+                    platforms:
+                      - {os: linux, arch: amd64}
+        "400":
+          description: Invalid program name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Storage error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/programs/{name}/download:
+    get:
+      operationId: autoDownload
+      summary: Auto-detect platform and redirect to binary download
+      description: |
+        Detects OS and arch from the `User-Agent` header.
+        Query parameters `os` and `arch` override detection.
+        Resolves the requested version and issues a `302` redirect to the
+        direct download URL.
+
+        **User-Agent OS detection** (case-insensitive substring match):
+        - `darwin`, `macos`, or `macintosh` → `darwin`
+        - `windows` or `win` → `windows`
+        - `linux` → `linux`
+        - *(default)* → `linux`
+
+        **User-Agent arch detection:**
+        - `aarch64` or `arm64` → `arm64`
+        - `x86_64`, `amd64`, or `x64` → `amd64`
+        - *(default)* → `amd64`
+      tags: [public]
+      parameters:
+        - $ref: "#/components/parameters/programName"
+        - name: version
+          in: query
+          required: false
+          description: |
+            Version selector. Accepts:
+            - `latest` (default) — highest non-prerelease, falls back to highest prerelease
+            - Exact version, e.g. `v1.2.0`
+            - Semver constraint, e.g. `^1.0`, `>=1.0 <2.0`
+          schema:
+            type: string
+            default: latest
+            example: "^1.0"
+        - name: os
+          in: query
+          required: false
+          description: Override OS detection
+          schema:
+            type: string
+            enum: [linux, darwin, windows]
+        - name: arch
+          in: query
+          required: false
+          description: Override arch detection
+          schema:
+            type: string
+            enum: [amd64, arm64]
+      responses:
+        "302":
+          description: Redirect to direct download URL
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /api/v1/programs/myapp/v1.2.0/linux/amd64
+            Cache-Control:
+              schema:
+                type: string
+                example: no-cache
+        "400":
+          description: Invalid name, OS, or arch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Program not found, version not found, or no binary for platform
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/programs/{name}/{version}/{os}/{arch}:
+    get:
+      operationId: directDownload
+      summary: Download a binary directly
+      description: |
+        Serves the binary file. Supports:
+        - HTTP range requests (`Range` header → `206 Partial Content`)
+        - Conditional GET (`If-None-Match` with ETag → `304 Not Modified`)
+
+        ETag format: `"<modtime_unix_hex>-<size_hex>"`
+
+        Windows binaries are served with a `.exe` filename in
+        `Content-Disposition`.
+      tags: [public]
+      parameters:
+        - $ref: "#/components/parameters/programName"
+        - $ref: "#/components/parameters/version"
+        - $ref: "#/components/parameters/os"
+        - $ref: "#/components/parameters/arch"
+      responses:
+        "200":
+          description: Binary file content
+          headers:
+            ETag:
+              schema:
+                type: string
+                example: '"17a3c5b2-4a000"'
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=86400
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'attachment; filename="myapp"'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: Not modified (ETag matched)
+        "206":
+          description: Partial content (range request)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Binary not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: File open error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      operationId: uploadBinary
+      summary: Upload a binary
+      tags: [write]
+      security:
+        - HMACAuth: []
+      parameters:
+        - $ref: "#/components/parameters/programName"
+        - $ref: "#/components/parameters/version"
+        - $ref: "#/components/parameters/os"
+        - $ref: "#/components/parameters/arch"
+      requestBody:
+        required: true
+        description: Raw binary content. Max size defined by `max_upload_size` (default 512 MiB).
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: Binary uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          description: Invalid parameters or file too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid HMAC signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded (60 req/min per IP)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      operationId: deleteBinary
+      summary: Delete a single binary
+      description: |
+        Removes the binary file for the specified platform.
+        Empty parent directories (arch → os → version) are cleaned up
+        automatically. The program directory is never removed.
+      tags: [write]
+      security:
+        - HMACAuth: []
+      parameters:
+        - $ref: "#/components/parameters/programName"
+        - $ref: "#/components/parameters/version"
+        - $ref: "#/components/parameters/os"
+        - $ref: "#/components/parameters/arch"
+      responses:
+        "200":
+          description: Binary deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid HMAC signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Storage error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/programs/{name}/{version}:
+    delete:
+      operationId: deleteVersion
+      summary: Delete an entire version
+      description: Removes the version directory and all binaries within it (all platforms).
+      tags: [write]
+      security:
+        - HMACAuth: []
+      parameters:
+        - $ref: "#/components/parameters/programName"
+        - $ref: "#/components/parameters/version"
+      responses:
+        "200":
+          description: Version deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+              example:
+                message: version deleted
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid HMAC signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Storage error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
