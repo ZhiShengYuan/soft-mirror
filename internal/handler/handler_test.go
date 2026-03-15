@@ -167,8 +167,8 @@ func TestDirectDownload_WindowsExeFilename(t *testing.T) {
 	if cd == "" {
 		t.Fatal("missing Content-Disposition")
 	}
-	// Should reference .exe filename
-	if cd != `attachment; filename="myapp.exe"` {
+	// Should reference human-readable filename with .exe extension
+	if cd != `attachment; filename="myapp-windows-amd64-v1.0.0.exe"` {
 		t.Errorf("unexpected Content-Disposition: %q", cd)
 	}
 }

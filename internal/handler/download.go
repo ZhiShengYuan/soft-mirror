@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 
@@ -133,9 +134,11 @@ func DirectDownload(store *storage.Store) gin.HandlerFunc {
 		c.Header("ETag", etag)
 		c.Header("Cache-Control", "public, max-age=86400")
 
-		// Use the actual stored filename for the download
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, info.Filename))
+		// Build human-readable download filename
+		ext := filepath.Ext(info.Filename)
+		dlName := fmt.Sprintf("%s-%s-%s-%s%s", name, osName, arch, version, ext)
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, dlName))
 
-		http.ServeContent(c.Writer, c.Request, info.Filename, info.ModTime, f)
+		http.ServeContent(c.Writer, c.Request, dlName, info.ModTime, f)
 	}
 }
