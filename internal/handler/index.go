@@ -45,9 +45,11 @@ func Index(store *storage.Store, tmpl *template.Template) gin.HandlerFunc {
 			}
 
 			// Find latest non-prerelease version
+			verMap := map[string]string{}
 			var parsed []*semverlib.Version
 			for _, v := range versions {
 				if sv, err := filesemver.CoerceVersion(v); err == nil {
+					verMap[sv.Original()] = v
 					parsed = append(parsed, sv)
 				}
 			}
@@ -69,7 +71,8 @@ func Index(store *storage.Store, tmpl *template.Template) gin.HandlerFunc {
 			// Collect unique platforms across all versions (from latest)
 			platformSet := map[string]bool{}
 			if latest != "" {
-				platforms, _ := store.ListPlatforms(prog, latest)
+				latestRaw := verMap[latest]
+				platforms, _ := store.ListPlatforms(prog, latestRaw)
 				for _, p := range platforms {
 					platformSet[fmt.Sprintf("%s/%s", p.OS, p.Arch)] = true
 				}
