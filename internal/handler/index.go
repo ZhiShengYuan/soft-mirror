@@ -10,6 +10,7 @@ import (
 
 	semverlib "github.com/Masterminds/semver/v3"
 
+	filesemver "file-host/internal/semver"
 	"file-host/internal/storage"
 )
 
@@ -46,7 +47,7 @@ func Index(store *storage.Store, tmpl *template.Template) gin.HandlerFunc {
 			// Find latest non-prerelease version
 			var parsed []*semverlib.Version
 			for _, v := range versions {
-				if sv, err := semverlib.NewVersion(v); err == nil {
+				if sv, err := filesemver.CoerceVersion(v); err == nil {
 					parsed = append(parsed, sv)
 				}
 			}

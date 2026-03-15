@@ -10,6 +10,7 @@ import (
 
 	semverlib "github.com/Masterminds/semver/v3"
 
+	filesemver "file-host/internal/semver"
 	"file-host/internal/storage"
 	"file-host/internal/validate"
 )
@@ -53,7 +54,7 @@ func ProgramPage(store *storage.Store, tmpl *template.Template) gin.HandlerFunc 
 		parsed := make([]*semverlib.Version, 0, len(rawVersions))
 		verMap := map[string]string{} // canonical -> original
 		for _, v := range rawVersions {
-			sv, err := semverlib.NewVersion(v)
+			sv, err := filesemver.CoerceVersion(v)
 			if err == nil {
 				parsed = append(parsed, sv)
 				verMap[sv.Original()] = v
