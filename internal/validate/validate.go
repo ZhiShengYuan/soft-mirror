@@ -12,6 +12,9 @@ import (
 
 var programNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+// fourComponentVersionRegex matches versions like "2.1.39.0" (UWP-style).
+var fourComponentVersionRegex = regexp.MustCompile(`^\d+\.\d+\.\d+\.\d+$`)
+
 // ValidateProgramName checks that name matches ^[a-zA-Z0-9_-]+$ and is at most 128 characters.
 func ValidateProgramName(name string) error {
 	if name == "" {
@@ -26,16 +29,20 @@ func ValidateProgramName(name string) error {
 	return nil
 }
 
-// ValidateVersion checks that version is valid semver, with or without a "v" prefix.
+// ValidateVersion checks that version is valid semver (with or without "v" prefix)
+// or a 4-component version as used by UWP packages (e.g. "2.1.39.0").
 func ValidateVersion(version string) error {
 	if version == "" {
 		return fmt.Errorf("version must not be empty")
 	}
 	v := strings.TrimPrefix(version, "v")
-	if _, err := semver.NewVersion(v); err != nil {
-		return fmt.Errorf("invalid semver version %q: %w", version, err)
+	if _, err := semver.NewVersion(v); err == nil {
+		return nil
 	}
-	return nil
+	if fourComponentVersionRegex.MatchString(v) {
+		return nil
+	}
+	return fmt.Errorf("invalid version %q: must be semver (e.g. 1.2.3) or 4-component (e.g. 1.2.3.0)", version)
 }
 
 // ValidateOS checks that os is in the allowed OS list.

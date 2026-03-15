@@ -2,9 +2,24 @@ package semver
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 )
+
+// coerceVersion parses s as semver. If s has 4 dot-separated components
+// (e.g. UWP "2.1.39.0"), it falls back to parsing the first three components.
+// The caller always uses the original string as the on-disk name.
+func coerceVersion(s string) (*semver.Version, error) {
+	v := strings.TrimPrefix(s, "v")
+	if parsed, err := semver.NewVersion(v); err == nil {
+		return parsed, nil
+	}
+	if parts := strings.Split(v, "."); len(parts) == 4 {
+		return semver.NewVersion(strings.Join(parts[:3], "."))
+	}
+	return nil, fmt.Errorf("cannot parse version %q", s)
+}
 
 // Resolve returns the best version string from available versions given a query.
 // Query can be:
@@ -22,7 +37,7 @@ type parsed struct {
 func Resolve(query string, available []string) (string, error) {
 	var versions []parsed
 	for _, s := range available {
-		v, err := semver.NewVersion(s)
+		v, err := coerceVersion(s)
 		if err != nil {
 			continue
 		}
@@ -38,7 +53,7 @@ func Resolve(query string, available []string) (string, error) {
 	}
 
 	// Try exact match first.
-	if qv, err := semver.NewVersion(query); err == nil {
+	if qv, err := coerceVersion(query); err == nil {
 		for _, p := range versions {
 			if p.version.Equal(qv) {
 				return p.original, nil
