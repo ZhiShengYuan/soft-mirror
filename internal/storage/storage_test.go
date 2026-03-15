@@ -29,7 +29,7 @@ func TestPathConfinement(t *testing.T) {
 			t.Errorf("expected error for traversal %v, got nil", parts)
 		}
 		// Should not have created any files outside root
-		err2 := store.PutBinary(prog, ver, osName, arch, bytes.NewReader([]byte("test")), 1024)
+		err2 := store.PutBinary(prog, ver, osName, arch, "", bytes.NewReader([]byte("test")), 1024)
 		if err2 == nil {
 			// If put somehow succeeded (shouldn't), verify file is inside root
 			absPath, _ := filepath.Abs(filepath.Join(root, prog, ver, osName, arch))
@@ -48,7 +48,7 @@ func TestPutAndGet(t *testing.T) {
 	}
 
 	content := []byte("hello binary world")
-	err = store.PutBinary("myapp", "v1.0.0", "linux", "amd64", bytes.NewReader(content), 1024*1024)
+	err = store.PutBinary("myapp", "v1.0.0", "linux", "amd64", "", bytes.NewReader(content), 1024*1024)
 	if err != nil {
 		t.Fatalf("PutBinary: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestListVersions(t *testing.T) {
 
 	content := []byte("bin")
 	for _, v := range []string{"v1.0.0", "v1.1.0", "v2.0.0"} {
-		if err := store.PutBinary("app", v, "linux", "amd64", bytes.NewReader(content), 1024); err != nil {
+		if err := store.PutBinary("app", v, "linux", "amd64", "", bytes.NewReader(content), 1024); err != nil {
 			t.Fatalf("PutBinary %s: %v", v, err)
 		}
 	}
@@ -104,7 +104,7 @@ func TestDeleteBinary(t *testing.T) {
 	}
 
 	content := []byte("bin")
-	if err := store.PutBinary("app", "v1.0.0", "linux", "amd64", bytes.NewReader(content), 1024); err != nil {
+	if err := store.PutBinary("app", "v1.0.0", "linux", "amd64", "", bytes.NewReader(content), 1024); err != nil {
 		t.Fatalf("PutBinary: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestMaxSize(t *testing.T) {
 	}
 
 	big := bytes.Repeat([]byte("x"), 1000)
-	err = store.PutBinary("app", "v1.0.0", "linux", "amd64", bytes.NewReader(big), 100)
+	err = store.PutBinary("app", "v1.0.0", "linux", "amd64", "", bytes.NewReader(big), 100)
 	if err == nil {
 		t.Error("expected error for oversized file, got nil")
 	}
@@ -140,7 +140,7 @@ func TestWindowsFilename(t *testing.T) {
 	}
 
 	content := []byte("exe content")
-	if err := store.PutBinary("app", "v1.0.0", "windows", "amd64", bytes.NewReader(content), 1024); err != nil {
+	if err := store.PutBinary("app", "v1.0.0", "windows", "amd64", "", bytes.NewReader(content), 1024); err != nil {
 		t.Fatalf("PutBinary: %v", err)
 	}
 

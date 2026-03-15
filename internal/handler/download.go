@@ -133,13 +133,9 @@ func DirectDownload(store *storage.Store) gin.HandlerFunc {
 		c.Header("ETag", etag)
 		c.Header("Cache-Control", "public, max-age=86400")
 
-		// Determine download filename
-		dlFilename := name
-		if osName == "windows" {
-			dlFilename += ".exe"
-		}
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, dlFilename))
+		// Use the actual stored filename for the download
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, info.Filename))
 
-		http.ServeContent(c.Writer, c.Request, dlFilename, info.ModTime, f)
+		http.ServeContent(c.Writer, c.Request, info.Filename, info.ModTime, f)
 	}
 }

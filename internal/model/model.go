@@ -10,12 +10,13 @@ type Platform struct {
 
 // Binary represents a stored binary file
 type Binary struct {
-	Program string
-	Version string
-	OS      string
-	Arch    string
-	Size    int64
-	ModTime time.Time
+	Program  string
+	Version  string
+	OS       string
+	Arch     string
+	Filename string // actual on-disk filename (e.g. "HyPlayer.msix")
+	Size     int64
+	ModTime  time.Time
 }
 
 // AllowedOS is the strict allowlist for OS values

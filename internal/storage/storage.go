@@ -42,16 +42,49 @@ func (s *Store) safePath(parts ...string) (string, error) {
 	return resolved, nil
 }
 
-// filename returns the binary filename for a program on a given OS.
-func filename(program, osName string) string {
+// defaultFilename returns the fallback binary filename when no explicit name is provided.
+func defaultFilename(program, osName string) string {
 	if osName == "windows" {
 		return program + ".exe"
 	}
 	return program
 }
 
+// findBinary scans the arch directory and returns the path and basename of the
+// first regular non-hidden file found. This allows the stored file to carry any
+// extension (e.g. .msix, .exe, no extension).
+func (s *Store) findBinary(program, version, osName, arch string) (path, name string, err error) {
+	dir, dirErr := s.safePath(program, version, osName, arch)
+	if dirErr != nil {
+		return "", "", dirErr
+	}
+	entries, readErr := os.ReadDir(dir)
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			return "", "", fmt.Errorf("binary not found: %s %s %s/%s", program, version, osName, arch)
+		}
+		return "", "", fmt.Errorf("reading binary dir: %w", readErr)
+	}
+	for _, e := range entries {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		p, safeErr := s.safePath(program, version, osName, arch, e.Name())
+		if safeErr != nil {
+			continue
+		}
+		return p, e.Name(), nil
+	}
+	return "", "", fmt.Errorf("binary not found: %s %s %s/%s", program, version, osName, arch)
+}
+
 // PutBinary atomically writes binary content for the given program/version/os/arch.
-func (s *Store) PutBinary(program, version, osName, arch string, r io.Reader, maxSize int64) error {
+// fname is the filename to store (e.g. "HyPlayer.msix"); pass "" to use the default
+// (program name + ".exe" on Windows, bare program name elsewhere).
+func (s *Store) PutBinary(program, version, osName, arch, fname string, r io.Reader, maxSize int64) error {
+	if fname == "" {
+		fname = defaultFilename(program, osName)
+	}
 	dir, err := s.safePath(program, version, osName, arch)
 	if err != nil {
 		return err
@@ -60,7 +93,6 @@ func (s *Store) PutBinary(program, version, osName, arch string, r io.Reader, ma
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	fname := filename(program, osName)
 	finalPath, err := s.safePath(program, version, osName, arch, fname)
 	if err != nil {
 		return err
@@ -97,25 +129,17 @@ func (s *Store) PutBinary(program, version, osName, arch string, r io.Reader, ma
 
 // GetBinaryPath returns the absolute path to a stored binary, or error if not found.
 func (s *Store) GetBinaryPath(program, version, osName, arch string) (string, error) {
-	fname := filename(program, osName)
-	path, err := s.safePath(program, version, osName, arch, fname)
-	if err != nil {
-		return "", err
-	}
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("binary not found: %s %s %s/%s", program, version, osName, arch)
-		}
-		return "", fmt.Errorf("stating binary: %w", err)
-	}
-	return path, nil
+	path, _, err := s.findBinary(program, version, osName, arch)
+	return path, err
 }
 
 // DeleteBinary removes a single binary file and its parent directories if empty.
 func (s *Store) DeleteBinary(program, version, osName, arch string) error {
-	fname := filename(program, osName)
-	path, err := s.safePath(program, version, osName, arch, fname)
+	path, _, err := s.findBinary(program, version, osName, arch)
 	if err != nil {
+		if strings.Contains(err.Error(), "binary not found") {
+			return nil // already gone
+		}
 		return err
 	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -222,13 +246,10 @@ func (s *Store) ListPlatforms(program, version string) ([]model.Platform, error)
 			}
 			archName := archEntry.Name()
 			// Verify the binary file actually exists
-			fname := filename(program, osName)
-			binPath, err := s.safePath(program, version, osName, archName, fname)
-			if err != nil {
-				continue
-			}
-			if _, err := os.Stat(binPath); err == nil {
-				platforms = append(platforms, model.Platform{OS: osName, Arch: archName})
+			if binPath, _, err := s.findBinary(program, version, osName, archName); err == nil {
+				if _, err := os.Stat(binPath); err == nil {
+					platforms = append(platforms, model.Platform{OS: osName, Arch: archName})
+				}
 			}
 		}
 	}
@@ -237,10 +258,9 @@ func (s *Store) ListPlatforms(program, version string) ([]model.Platform, error)
 
 // BinaryInfo returns metadata for a stored binary.
 func (s *Store) BinaryInfo(program, version, osName, arch string) (*model.Binary, error) {
-	fname := filename(program, osName)
-	path, err := s.safePath(program, version, osName, arch, fname)
+	path, fname, err := s.findBinary(program, version, osName, arch)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("binary not found")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -252,9 +272,10 @@ func (s *Store) BinaryInfo(program, version, osName, arch string) (*model.Binary
 	return &model.Binary{
 		Program: program,
 		Version: version,
-		OS:      osName,
-		Arch:    arch,
-		Size:    info.Size(),
-		ModTime: info.ModTime().UTC().Truncate(time.Second),
+		OS:       osName,
+		Arch:     arch,
+		Filename: fname,
+		Size:     info.Size(),
+		ModTime:  info.ModTime().UTC().Truncate(time.Second),
 	}, nil
 }

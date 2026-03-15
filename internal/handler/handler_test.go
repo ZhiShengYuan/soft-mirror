@@ -44,7 +44,7 @@ func newStore(t *testing.T) *storage.Store {
 // seedBinary uploads a tiny binary into the store.
 func seedBinary(t *testing.T, store *storage.Store, program, version, osName, arch string) {
 	t.Helper()
-	if err := store.PutBinary(program, version, osName, arch, bytes.NewReader([]byte("binary")), 1<<20); err != nil {
+	if err := store.PutBinary(program, version, osName, arch, "", bytes.NewReader([]byte("binary")), 1<<20); err != nil {
 		t.Fatalf("seed PutBinary: %v", err)
 	}
 }
