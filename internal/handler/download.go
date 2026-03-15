@@ -96,6 +96,19 @@ func DirectDownload(store *storage.Store) gin.HandlerFunc {
 			return
 		}
 
+		// Resolve version to the on-disk directory name (handles v-prefix mismatch)
+		available, err := store.ListVersions(name)
+		if err != nil || len(available) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "program not found"})
+			return
+		}
+		resolved, err := semver.Resolve(version, available)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("version not found: %s", err.Error())})
+			return
+		}
+		version = resolved
+
 		info, err := store.BinaryInfo(name, version, osName, arch)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "binary not found"})
