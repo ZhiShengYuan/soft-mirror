@@ -85,7 +85,7 @@ func Index(store *storage.Store, tmpl *template.Template) gin.HandlerFunc {
 
 			summaries = append(summaries, ProgramSummary{
 				Name:          prog,
-				LatestVersion: latest,
+				LatestVersion: verMap[latest],
 				VersionCount:  len(versions),
 				Platforms:     platformList,
 			})
